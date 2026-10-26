@@ -90,6 +90,57 @@ Salieron **2 correos a clientes** (#21 y #22) y **ninguno a #25**, porque no hay
 Ojo: hay clientes sin email; avísales por teléfono.
 ```
 
-### Incidencia detectada al probar el caso sin email
+Al crear el #25, el flujo 01 falló al intentar confirmarle el encargo (`No recipients defined`). No afecta a este flujo, pero queda anotado como mejora pendiente en la entrada siguiente.
 
-Al crear el encargo #25, el flujo **01** intentó mandarle la confirmación y falló con `No recipients defined` (ejecución 236, 21:19). El flujo **00** avisó a Marisa del error, así que la red de seguridad funciona, pero la confirmación no se envió. Queda pendiente proteger el flujo 01 con la misma comprobación de email que ya tiene el 04 (IF «¿Tiene email el cliente?» antes de los envíos).
+---
+
+## 2026-10-26 · Mejora pendiente: el flujo 01 falla si el encargo no trae email
+
+**Herramienta:** OpenCode
+**Entrada:** ejecución **236** de `01 Eventos de la pasteleria` + `mis-flujos/01 Eventos de la pasteleria.json`
+**Estado:** documentada, sin corregir (no entra en el alcance del Paso 9)
+
+### Qué pasó
+
+Al crear el encargo #25 «Prueba Sin Email» desde la app, el webhook del flujo 01 se disparó como siempre (ejecución **236**, 21:19, `mode: webhook`) y terminó en **error**:
+
+```text
+01 Eventos de la pastelería: 1 item(s)
+Según el evento: 1 item(s)
+Confirmar encargo: 0 item(s) | ERROR: No recipients defined
+Último nodo ejecutado: Confirmar encargo
+```
+
+El flujo **00** hizo su trabajo y avisó a Marisa (`Ha fallado el flujo «01 Eventos de la pasteleria»`), pero la confirmación del encargo nunca salió. El problema no es el aviso de error: es que un encargo sin email **no debería** hacer fallar el flujo.
+
+### Por qué pasa
+
+Los tres nodos de correo del flujo 01 usan:
+
+```text
+toEmail = {{ $json.body.datos.email }}
+```
+
+Cuando la app envía el webhook con `email` vacío, el nodo `Send Email` se queda sin destinatario y lanza `No recipients defined`. No es un fallo de la app ni de la credencial de Mailpit: es que el flujo no contempla el caso.
+
+### Arreglo propuesto
+
+El mismo patrón que ya funciona en el flujo 04, pero una sola vez para las tres ramas:
+
+1. Añadir un nodo **If** justo después del webhook, antes de `Según el evento`. Nombre: `¿Tiene email el cliente?`. Condición: `{{ $json.body.datos.email }}` **is not empty**.
+2. Salida **true** → `Según el evento` (todo sigue igual).
+3. Salida **false** → un **No-Op** llamado `Sin email: no se avisa`.
+4. Borrar la conexión antigua webhook → `Según el evento`.
+5. Guardar y **publicar**.
+
+Así un encargo sin email se procesa sin error y simplemente no manda correo; el resto de encargos no cambia.
+
+### Cómo comprobarlo cuando se haga
+
+- Crear un encargo **sin** email → el flujo 01 termina en `success`, no sale correo y **no** llega aviso de error a Marisa.
+- Crear un encargo **con** email → sigue llegando la confirmación.
+- Marcar ese mismo encargo como pagado → siguen llegando «Tu encargo está pagado» y el recibo.
+
+### Por qué no se ha hecho ya
+
+Hay que editar y publicar el flujo en la interfaz de n8n, y el objetivo del Paso 9 era exportar y publicar los flujos. Queda como mejora para la próxima sesión, junto con la corrección en n8n de las direcciones `@lacuchara.exemple` (los JSON del repo ya están bien).
