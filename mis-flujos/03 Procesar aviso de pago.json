@@ -1,0 +1,384 @@
+{
+  "name": "03 Procesar aviso de pago",
+  "nodes": [
+    {
+      "parameters": {
+        "formTitle": "Correo del banco",
+        "formDescription": "Pega aquí el texto del correo recibido",
+        "formFields": {
+          "values": [
+            {
+              "fieldLabel": "Texto del correo",
+              "fieldType": "textarea"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.formTrigger",
+      "typeVersion": 2.6,
+      "position": [
+        -416,
+        240
+      ],
+      "id": "5a3a135f-7d84-455c-a9d7-70492edc68aa",
+      "name": "Pegar correo",
+      "webhookId": "04fa5015-5621-415b-a2d7-93d6626ab59a"
+    },
+    {
+      "parameters": {
+        "text": "={{ $json['Texto del correo'] }}",
+        "schemaType": "fromJson",
+        "jsonSchemaExample": "{ \"es_pago\": true, \"ordenante\": \"CARMEN RUIZ\", \"importe\": 12.5, \"forma\": \"bizum\", \"concepto\": \"tarta queso\" }",
+        "options": {
+          "systemPromptTemplate": "Eres un asistente que analiza notificaciones bancarias. \nInstrucciones estrictas:\n- es_pago: boolean (true para Bizum o transferencia de pago, false si es publicidad u otro tipo de correo).\n- ordenante: string (nombre del pagador tal cual aparece). Si no hay, usa \"\".\n- importe: number (valor numérico con decimales, por ejemplo 15.0). Si no hay pago, usa 0.\n- forma: string (\"bizum\" o \"transferencia\" en minúsculas). Si no se indica, usa \"\".\n- concepto: string (extrae el texto del concepto tal cual, sin convertir números a integer). Si no hay, usa \"\".\n\nRegla de oro: Devuelve SIEMPRE texto string para ordenante, forma y concepto. NUNCA devuelvas valores null ni dejes campos omitidos."
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.informationExtractor",
+      "typeVersion": 1.2,
+      "position": [
+        -240,
+        -16
+      ],
+      "id": "3971c2e4-95dc-45fc-865b-22bbc7af9f54",
+      "name": "Information Extractor"
+    },
+    {
+      "parameters": {
+        "model": "=openai/gpt-oss-120b",
+        "options": {
+          "temperature": 0
+        }
+      },
+      "type": "@n8n/n8n-nodes-langchain.lmChatGroq",
+      "typeVersion": 1,
+      "position": [
+        -224,
+        256
+      ],
+      "id": "9afe8f5a-8bce-49da-9114-4bb17adb79a6",
+      "name": "Groq Chat Model",
+      "credentials": {
+        "groqApi": {
+          "id": "5jDi7ezWBNyXxHfr",
+          "name": "Groq account"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "d96788e4-6873-49b7-911f-2b225508d6c0",
+              "leftValue": "={{ $json.output.es_pago }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        -32,
+        304
+      ],
+      "id": "bf086cf8-6ca1-4ea7-a008-b6e523595ef0",
+      "name": "¿Es un pago?"
+    },
+    {
+      "parameters": {
+        "url": "http://pasteleria:8000/api/encargos",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "estado",
+              "value": "pendiente"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        144,
+        144
+      ],
+      "id": "ac2c5089-3721-4b44-ae15-f316413e9eab",
+      "name": "Encargos Pendientes",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jyFXvwWIJnKRjOwX",
+          "name": "API Pasteleria"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const datos = $('Information Extractor').first().json;\nconst pendientes = $input.all().map(i => i.json).filter(e => e.id);\nconst norm = s => (s || '').toLowerCase().normalize('NFD').replace(/[\\u0300-\\u036f]/g, '').replace(/[^a-z0-9 ]/g, ' ').trim();\n\nlet candidatos = [];\nconst porNumero = norm(datos.concepto).match(/(?:encargo|pedido)\\s*(\\d+)/);\nif (porNumero) {\n  candidatos = pendientes.filter(e => e.id === Number(porNumero[1]));\n} else {\n  // Nombre: el primer nombre coincide y el siguiente apellido empieza igual (sirve \"JORGE M.\")\n  const t = norm(datos.ordenante).split(/\\s+/).filter(Boolean);\n  candidatos = pendientes.filter(e => {\n    const c = norm(e.cliente).split(/\\s+/);\n    return t.length >= 2 && c[0] === t[0] && c.slice(1).some(w => w.startsWith(t[1]) || t[1].startsWith(w));\n  });\n}\n\nconst base = { ordenante: datos.ordenante, importe: datos.importe, forma: datos.forma, concepto: datos.concepto };\nif (candidatos.length !== 1)\n  return [{ json: { ...base, decision: 'revisar', motivo: candidatos.length ? 'Hay varios encargos posibles' : 'No he encontrado ningún encargo pendiente de esa persona' } }];\nconst e = candidatos[0];\nif (datos.importe > e.pendiente)\n  return [{ json: { ...base, decision: 'revisar', encargo_id: e.id, motivo: `Paga ${datos.importe} € pero al encargo #${e.id} solo le faltan ${e.pendiente} €` } }];\nreturn [{ json: { ...base, decision: 'registrar', encargo_id: e.id, motivo: 'Coincide con un único encargo' } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        304,
+        -128
+      ],
+      "id": "502eb35f-962f-498e-9145-4f403639a38a",
+      "name": "Buscar encargo y registrar pago"
+    },
+    {
+      "parameters": {
+        "rules": {
+          "values": [
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 4
+                },
+                "conditions": [
+                  {
+                    "leftValue": "={{ $json.decision }}",
+                    "rightValue": "registrar",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals"
+                    },
+                    "id": "c8fce648-d7ed-4d73-bc27-db2cc128dcad"
+                  }
+                ],
+                "combinator": "and"
+              }
+            },
+            {
+              "conditions": {
+                "options": {
+                  "caseSensitive": true,
+                  "leftValue": "",
+                  "typeValidation": "strict",
+                  "version": 4
+                },
+                "conditions": [
+                  {
+                    "id": "f85502d6-3284-4342-b081-ab78688525e4",
+                    "leftValue": "",
+                    "rightValue": "",
+                    "operator": {
+                      "type": "string",
+                      "operation": "equals",
+                      "name": "filter.operator.equals"
+                    }
+                  }
+                ],
+                "combinator": "and"
+              }
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.switch",
+      "typeVersion": 3.5,
+      "position": [
+        512,
+        -16
+      ],
+      "id": "22c9b887-1a49-47d3-a783-cab291156e89",
+      "name": "¿Se puede registrar?"
+    },
+    {
+      "parameters": {
+        "method": "POST",
+        "url": "=http://pasteleria:8000/api/encargos/{{ $json.encargo_id }}/pagos",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendBody": true,
+        "specifyBody": "json",
+        "jsonBody": "={ \"importe\": {{ $json.importe }}, \"forma_pago\": \"{{ $json.forma }}\" }",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        736,
+        -112
+      ],
+      "id": "344926c8-f350-4fba-8d45-6e87084a7f31",
+      "name": "Registrar el pago",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jyFXvwWIJnKRjOwX",
+          "name": "API Pasteleria"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "fromEmail": "pasteleria@lacuchara.exemple",
+        "toEmail": "marisa@lacuchara.example",
+        "subject": "=Pago para revisar: {{ $json.importe }} € de {{ $json.ordenante }}",
+        "emailFormat": "text",
+        "text": "=Hola Marisa,\n\nHa llegado un pago y no lo he registrado.\n\nMotivo: {{ $json.motivo }}\n\nOrdenante: {{ $json.ordenante }}\nImporte: {{ $json.importe }} €\nForma: {{ $json.forma }}\nConcepto: {{ $json.concepto }}\n\nRegístralo tú si es correcto.",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        736,
+        80
+      ],
+      "id": "162acfb7-1792-4aac-ae92-a1b17824d7fc",
+      "name": "Preguntar a Marisa",
+      "webhookId": "8bf6fedb-29cb-426e-9fb5-f8846b17362b",
+      "credentials": {
+        "smtp": {
+          "id": "QAf0Hy4NOQGVH6qG",
+          "name": "Mailpit"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        208,
+        336
+      ],
+      "id": "2194af08-1c0f-480d-aa33-6b40f258c47d",
+      "name": "Ignorar correo"
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Pegar correo": {
+      "main": [
+        [
+          {
+            "node": "Information Extractor",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Groq Chat Model": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "Information Extractor",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Information Extractor": {
+      "main": [
+        [
+          {
+            "node": "¿Es un pago?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Es un pago?": {
+      "main": [
+        [
+          {
+            "node": "Encargos Pendientes",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Ignorar correo",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Encargos Pendientes": {
+      "main": [
+        [
+          {
+            "node": "Buscar encargo y registrar pago",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar encargo y registrar pago": {
+      "main": [
+        [
+          {
+            "node": "¿Se puede registrar?",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Se puede registrar?": {
+      "main": [
+        [
+          {
+            "node": "Registrar el pago",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Preguntar a Marisa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "nxQ5PfSfL8e49FIo",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "3e503892-3e9c-4b67-9271-ba9cda6e2466",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fb5c4a4fec3e677e42841b032ca6837ec619156390814320030baf35395d7776"
+  },
+  "nodeGroups": [],
+  "id": "8IFy10kOcCOdrPEq",
+  "tags": []
+}

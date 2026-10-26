@@ -1,0 +1,150 @@
+{
+  "name": "02 Cierre diario",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 21
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        -560,
+        -32
+      ],
+      "id": "adbd6fc4-e62f-482d-8bf7-36506b96d258",
+      "name": "Schedule Trigger"
+    },
+    {
+      "parameters": {
+        "url": "http://pasteleria:8000/api/pagos",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "sendQuery": true,
+        "queryParameters": {
+          "parameters": [
+            {
+              "name": "desde",
+              "value": "={{ $now.format('yyyy-MM-dd') }}"
+            },
+            {
+              "name": "hasta",
+              "value": "={{ $now.format('yyyy-MM-dd') }}"
+            }
+          ]
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        -352,
+        -32
+      ],
+      "id": "7256aa1e-ed65-48f0-84a2-4e4d8186924a",
+      "name": "HTTP Request",
+      "alwaysOutputData": true,
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jyFXvwWIJnKRjOwX",
+          "name": "API Pasteleria"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "const pagos = $input.all().map(i => i.json).filter(p => p.importe);\nconst porForma = {};\nfor (const p of pagos) porForma[p.forma_pago] = (porForma[p.forma_pago] || 0) + p.importe;\nconst total = pagos.reduce((s, p) => s + p.importe, 0);\nconst lineas = Object.entries(porForma).map(([forma, importe]) => `  ${forma}: ${importe.toFixed(2)} €`);\nreturn [{ json: {\n  fecha: $now.toFormat('dd/MM/yyyy'),\n  total: total.toFixed(2),\n  resumen: pagos.length ? lineas.join('\\n') : '  (hoy no se ha cobrado nada)',\n  n: pagos.length,\n} }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        -128,
+        -32
+      ],
+      "id": "c51ddd53-c456-4931-8bb4-1f869254ca61",
+      "name": "Code in JavaScript"
+    },
+    {
+      "parameters": {
+        "fromEmail": "pasteleria@lacuchara.example",
+        "toEmail": "marisa@lacuchara.exemple",
+        "subject": "=Cierra de caja del {{ $json.fecha }}",
+        "html": "=Hola Marisa,\n\nHoy se han cobrado {{ $json.total }} € ({{ $json.n }} pagos):\n\n{{ $json.resumen }}",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        96,
+        -32
+      ],
+      "id": "50ef511b-cad3-4de7-8b21-aa108f119ea8",
+      "name": "Send an Email",
+      "webhookId": "230ab9df-4cf0-48ff-940e-3ee3c2b1a06a",
+      "credentials": {
+        "smtp": {
+          "id": "QAf0Hy4NOQGVH6qG",
+          "name": "Mailpit"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Schedule Trigger": {
+      "main": [
+        [
+          {
+            "node": "HTTP Request",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "HTTP Request": {
+      "main": [
+        [
+          {
+            "node": "Code in JavaScript",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Code in JavaScript": {
+      "main": [
+        [
+          {
+            "node": "Send an Email",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "nxQ5PfSfL8e49FIo",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "9057d806-d600-4dfe-a4d1-963e64e0642a",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fb5c4a4fec3e677e42841b032ca6837ec619156390814320030baf35395d7776"
+  },
+  "nodeGroups": [],
+  "id": "Jy4dMCCElD36Rh61",
+  "tags": []
+}

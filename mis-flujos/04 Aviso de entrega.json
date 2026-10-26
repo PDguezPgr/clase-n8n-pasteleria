@@ -1,0 +1,257 @@
+{
+  "name": "04 Aviso de entrega",
+  "nodes": [
+    {
+      "parameters": {
+        "rule": {
+          "interval": [
+            {
+              "triggerAtHour": 9
+            }
+          ]
+        }
+      },
+      "type": "n8n-nodes-base.scheduleTrigger",
+      "typeVersion": 1.4,
+      "position": [
+        0,
+        96
+      ],
+      "id": "fb4b0ae6-c2c2-405d-8187-df1715abe443",
+      "name": "Cada día a las 9:00"
+    },
+    {
+      "parameters": {
+        "url": "http://pasteleria:8000/api/encargos",
+        "authentication": "genericCredentialType",
+        "genericAuthType": "httpHeaderAuth",
+        "options": {}
+      },
+      "type": "n8n-nodes-base.httpRequest",
+      "typeVersion": 4.5,
+      "position": [
+        208,
+        96
+      ],
+      "id": "c359600c-7b4a-4c6a-99c6-760aeb681ff5",
+      "name": "Encargos de la app",
+      "credentials": {
+        "httpHeaderAuth": {
+          "id": "jyFXvwWIJnKRjOwX",
+          "name": "API Pasteleria"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "jsCode": "// Fecha de mañana en la zona horaria de n8n (Europe/Madrid)\nconst manana = $now.plus({ days: 1 });\nconst fecha = manana.toFormat('yyyy-MM-dd');\nconst fechaBonita = manana.toFormat('dd/MM/yyyy');\n\n// La API devuelve todos los encargos; aquí solo se filtra por fecha y estado.\nconst encargos = $input.all().map(i => i.json).filter(e => e && e.id);\nconst entregas = encargos.filter(e =>\n  e.fecha_entrega === fecha && (e.estado === 'pendiente' || e.estado === 'pagado')\n);\n\n// Un item por encargo: el nodo de correo manda un email por cada item.\nreturn entregas.map(e => {\n  const pagado = e.estado === 'pagado';\n  // \"pendiente\" viene calculado por la app: aquí solo se da formato.\n  const falta = Number(e.pendiente).toFixed(2).replace('.', ',');\n\n  const asunto = pagado\n    ? `Mañana puedes recoger tu ${e.tarta}`\n    : `Mañana es la entrega de tu ${e.tarta}`;\n\n  const texto = pagado\n    ? `Hola ${e.cliente}:\\n\\nTu ${e.tarta} estará lista mañana, ${fechaBonita}. Ya está pagada, así que solo tienes que pasar a recogerla.\\n\\n¡Gracias!`\n    : `Hola ${e.cliente}:\\n\\nMañana, ${fechaBonita}, es la entrega de tu ${e.tarta}.\\n\\nAún te faltan ${falta} € por pagar. Puedes pagarlos al recogerla.\\n\\n¡Gracias!`;\n\n  return {\n    json: {\n      encargo_id: e.id,\n      cliente: e.cliente,\n      email: e.email,\n      tarta: e.tarta,\n      estado: e.estado,\n      pendiente: e.pendiente,\n      fecha_entrega: e.fecha_entrega,\n      sin_email: !e.email,\n      asunto_cliente: asunto,\n      texto_cliente: texto,\n    },\n  };\n});"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        416,
+        96
+      ],
+      "id": "29d5558f-437c-476f-9910-6fa3013edf80",
+      "name": "Buscar entregas de mañana"
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict",
+            "version": 4
+          },
+          "conditions": [
+            {
+              "id": "7fbf6107-0367-4d2d-a1fd-70c1767bdc6a",
+              "leftValue": "={{ !!$json.email }}",
+              "rightValue": "",
+              "operator": {
+                "type": "boolean",
+                "operation": "true",
+                "singleValue": true
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.4,
+      "position": [
+        624,
+        96
+      ],
+      "id": "ca7a23ef-ea9d-4616-b21a-d85bf54c6b24",
+      "name": "¿Tiene email el cliente?"
+    },
+    {
+      "parameters": {
+        "fromEmail": "pasteleria@lacuchara.example",
+        "toEmail": "={{ $json.email }}",
+        "subject": "={{ $json.asunto_cliente }}",
+        "emailFormat": "text",
+        "text": "={{ $json.texto_cliente }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        832,
+        0
+      ],
+      "id": "a1666780-2c12-4fd9-b45f-ac6673bb0df2",
+      "name": "Avisar al cliente",
+      "webhookId": "bd700cf7-e559-457f-93ac-15c37626cc78",
+      "credentials": {
+        "smtp": {
+          "id": "QAf0Hy4NOQGVH6qG",
+          "name": "Mailpit"
+        }
+      }
+    },
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.noOp",
+      "typeVersion": 1,
+      "position": [
+        832,
+        192
+      ],
+      "id": "518f22b5-d3c1-470c-85ec-84b5602b9fcf",
+      "name": "Sin email: lo ve Marisa"
+    },
+    {
+      "parameters": {
+        "jsCode": "// Un solo correo para Marisa con todas las entregas de mañana.\nconst entregas = $input.all().map(i => i.json);\nconst fecha = $now.plus({ days: 1 }).toFormat('dd/MM/yyyy');\n\nconst lineas = entregas.map(e => {\n  const estado = e.estado === 'pagado'\n    ? 'pagada'\n    : `faltan ${Number(e.pendiente).toFixed(2).replace('.', ',')} €`;\n  const sinEmail = e.sin_email ? ' · SIN EMAIL' : '';\n  return `- #${e.encargo_id} ${e.cliente}${sinEmail}: ${e.tarta} (${estado})`;\n});\n\nconst sinEmail = entregas.filter(e => e.sin_email).length;\nconst avisoEmail = sinEmail\n  ? 'Ojo: hay clientes sin email; avísales por teléfono.'\n  : 'Todos los clientes con email ya tienen su aviso.';\n\nconst texto = `Hola Marisa:\\n\\nMañana, ${fecha}, hay ${entregas.length} entrega(s):\\n\\n${lineas.join('\\n')}\\n\\n${avisoEmail}`;\n\nreturn [{ json: { fecha, n: entregas.length, texto_marisa: texto } }];"
+      },
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [
+        624,
+        336
+      ],
+      "id": "3482b7a1-0968-4c0f-974c-8babcafd9490",
+      "name": "Resumen para Marisa"
+    },
+    {
+      "parameters": {
+        "fromEmail": "pasteleria@lacuchara.example",
+        "toEmail": "marisa@lacuchara.example",
+        "subject": "=Mañana hay {{ $json.n }} entrega(s) de tartas",
+        "emailFormat": "text",
+        "text": "={{ $json.texto_marisa }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        832,
+        336
+      ],
+      "id": "7168eeaf-74c0-4d2c-995e-8092b3d77351",
+      "name": "Avisar a Marisa",
+      "webhookId": "1a8807d5-22c7-4425-bcb7-e34e14a8a677",
+      "credentials": {
+        "smtp": {
+          "id": "QAf0Hy4NOQGVH6qG",
+          "name": "Mailpit"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Cada día a las 9:00": {
+      "main": [
+        [
+          {
+            "node": "Encargos de la app",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Encargos de la app": {
+      "main": [
+        [
+          {
+            "node": "Buscar entregas de mañana",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Buscar entregas de mañana": {
+      "main": [
+        [
+          {
+            "node": "¿Tiene email el cliente?",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Resumen para Marisa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "¿Tiene email el cliente?": {
+      "main": [
+        [
+          {
+            "node": "Avisar al cliente",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Sin email: lo ve Marisa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Resumen para Marisa": {
+      "main": [
+        [
+          {
+            "node": "Avisar a Marisa",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate",
+    "timeSavedMode": "fixed",
+    "errorWorkflow": "nxQ5PfSfL8e49FIo",
+    "callerPolicy": "workflowsFromSameOwner",
+    "availableInMCP": false
+  },
+  "versionId": "71acebfe-7104-46a4-9051-92228539dad1",
+  "meta": {
+    "instanceId": "fb5c4a4fec3e677e42841b032ca6837ec619156390814320030baf35395d7776"
+  },
+  "nodeGroups": [],
+  "id": "tkSBuL6R2volNKk9",
+  "tags": []
+}

@@ -1,0 +1,70 @@
+{
+  "name": "00 Avisar de errores",
+  "nodes": [
+    {
+      "parameters": {},
+      "type": "n8n-nodes-base.errorTrigger",
+      "typeVersion": 1,
+      "position": [
+        -320,
+        -32
+      ],
+      "id": "68c73536-49c8-40da-9e5d-30246456278f",
+      "name": "Si falla un flujo"
+    },
+    {
+      "parameters": {
+        "fromEmail": "pasteleria@lacuchara.exemple",
+        "toEmail": "marisa@lacuchara.exemple",
+        "subject": "=Ha fallado el flujo «{{ $json.workflow.name }}»",
+        "emailFormat": "text",
+        "text": "=Hola Marisa,\n\nUna automatización ha fallado.\n\nFlujo: {{ $json.workflow.name }}\nPaso: {{ $json.execution.lastNodeExecuted }}\nError: {{ $json.execution.error.message }}\nEjecución: {{ $json.execution.url }}",
+        "options": {
+          "appendAttribution": false
+        }
+      },
+      "type": "n8n-nodes-base.emailSend",
+      "typeVersion": 2.1,
+      "position": [
+        -96,
+        -32
+      ],
+      "id": "caf43173-87ae-4fc3-bb0c-fc013b0c5515",
+      "name": "Avisar a la dueña",
+      "webhookId": "1fbfe1e0-6478-44cc-a88a-ae150e26eb21",
+      "credentials": {
+        "smtp": {
+          "id": "QAf0Hy4NOQGVH6qG",
+          "name": "Mailpit"
+        }
+      }
+    }
+  ],
+  "pinData": {},
+  "connections": {
+    "Si falla un flujo": {
+      "main": [
+        [
+          {
+            "node": "Avisar a la dueña",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "active": true,
+  "settings": {
+    "executionOrder": "v1",
+    "binaryMode": "separate"
+  },
+  "versionId": "bb7360cc-d42b-4a32-a4ff-5121f8d0cea3",
+  "meta": {
+    "templateCredsSetupCompleted": true,
+    "instanceId": "fb5c4a4fec3e677e42841b032ca6837ec619156390814320030baf35395d7776"
+  },
+  "nodeGroups": [],
+  "id": "nxQ5PfSfL8e49FIo",
+  "tags": []
+}
