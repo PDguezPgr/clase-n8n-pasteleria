@@ -373,7 +373,7 @@
     "callerPolicy": "workflowsFromSameOwner",
     "availableInMCP": false
   },
-  "versionId": "3e503892-3e9c-4b67-9271-ba9cda6e2466",
+  "versionId": "f657d8c0-ea6f-48b6-952e-fae915a62ba6",
   "meta": {
     "templateCredsSetupCompleted": true,
     "instanceId": "fb5c4a4fec3e677e42841b032ca6837ec619156390814320030baf35395d7776"
