@@ -72,8 +72,8 @@
     {
       "parameters": {
         "fromEmail": "pasteleria@lacuchara.example",
-        "toEmail": "marisa@lacuchara.exemple",
-        "subject": "=Cierra de caja del {{ $json.fecha }}",
+        "toEmail": "marisa@lacuchara.example",
+        "subject": "=Cierre de caja del {{ $json.fecha }}",
         "html": "=Hola Marisa,\n\nHoy se han cobrado {{ $json.total }} € ({{ $json.n }} pagos):\n\n{{ $json.resumen }}",
         "options": {}
       },

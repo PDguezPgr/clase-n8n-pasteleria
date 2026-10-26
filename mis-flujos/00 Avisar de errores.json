@@ -14,8 +14,8 @@
     },
     {
       "parameters": {
-        "fromEmail": "pasteleria@lacuchara.exemple",
-        "toEmail": "marisa@lacuchara.exemple",
+        "fromEmail": "pasteleria@lacuchara.example",
+        "toEmail": "marisa@lacuchara.example",
         "subject": "=Ha fallado el flujo «{{ $json.workflow.name }}»",
         "emailFormat": "text",
         "text": "=Hola Marisa,\n\nUna automatización ha fallado.\n\nFlujo: {{ $json.workflow.name }}\nPaso: {{ $json.execution.lastNodeExecuted }}\nError: {{ $json.execution.error.message }}\nEjecución: {{ $json.execution.url }}",

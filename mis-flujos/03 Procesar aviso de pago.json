@@ -233,7 +233,7 @@
     },
     {
       "parameters": {
-        "fromEmail": "pasteleria@lacuchara.exemple",
+        "fromEmail": "pasteleria@lacuchara.example",
         "toEmail": "marisa@lacuchara.example",
         "subject": "=Pago para revisar: {{ $json.importe }} € de {{ $json.ordenante }}",
         "emailFormat": "text",

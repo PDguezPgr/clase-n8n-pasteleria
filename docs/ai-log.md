@@ -36,7 +36,7 @@
 
 - [x] Sin entregas mañana → no llega ningún correo y la ejecución termina bien.
 - [x] Con una entrega pagada y otra pendiente → 2 correos a clientes + 1 a Marisa.
-- [ ] Un encargo de mañana sin email → no se envía al cliente y Marisa lo ve marcado.
+- [x] Un encargo de mañana sin email → no se envía al cliente y Marisa lo ve marcado.
 
 ### Resultado de las pruebas (26/10/2026)
 
@@ -71,4 +71,25 @@ Mañana, 27/10/2026, hay 2 entrega(s):
 Todos los clientes con email ya tienen su aviso.
 ```
 
-**3. Un encargo de mañana sin email** — **pendiente de probar**. Se creó el encargo de prueba **#25 «Prueba Sin Email»** (entrega 27/10, pendiente 20,00 €, sin email) para el caso, pero todavía no se ha ejecutado el flujo con él. Cuando se ejecute debe pasar por la rama `false` del IF («Sin email: lo ve Marisa»), no salir correo al cliente y aparecer en el resumen de Marisa marcado como `SIN EMAIL`.
+**3. Un encargo de mañana sin email** — ejecución **238** (21:28, manual, `success`) con el encargo de prueba **#25 «Prueba Sin Email»** (entrega 27/10, pendiente 20,00 €, sin email). Los items que pasan por cada nodo:
+
+```text
+Encargos de la app: 25 item(s)
+Buscar entregas de mañana: 3 item(s)
+¿Tiene email el cliente?: 2 item(s)
+Avisar al cliente: 2 item(s)
+Sin email: lo ve Marisa: 1 item(s)
+Resumen para Marisa: 1 item(s)
+```
+
+Salieron **2 correos a clientes** (#21 y #22) y **ninguno a #25**, porque no hay dirección a la que escribir. El resumen de Marisa añadió la línea marcada y el aviso:
+
+```text
+- #25 Prueba Sin Email · SIN EMAIL: Tarta de prueba (faltan 20,00 €)
+
+Ojo: hay clientes sin email; avísales por teléfono.
+```
+
+### Incidencia detectada al probar el caso sin email
+
+Al crear el encargo #25, el flujo **01** intentó mandarle la confirmación y falló con `No recipients defined` (ejecución 236, 21:19). El flujo **00** avisó a Marisa del error, así que la red de seguridad funciona, pero la confirmación no se envió. Queda pendiente proteger el flujo 01 con la misma comprobación de email que ya tiene el 04 (IF «¿Tiene email el cliente?» antes de los envíos).
